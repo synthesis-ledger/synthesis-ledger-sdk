@@ -18,7 +18,8 @@ const SYNL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_SYNL_TOKEN_ADDRESS;
 
 const LEDGER_ABI = [
     "function recordPulse(bytes32 id, uint256 bps, bytes32 certHash) external returns (bool)",
-    "function registry(bytes32 id) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)"
+    "function registry(bytes32 id) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)",
+    "function createSilo(bytes32 id, string cid) external returns (bool)"
 ];
 
 const ERC20_ABI = [
@@ -40,7 +41,7 @@ const callBridge = async (messages, modelName) => {
 program
   .name('synthesis')
   .description('Sovereign Audit Engine - Genesis v2')
-  .version('2.0.2');
+  .version('2.0.3');
 
 // --- 📋 COMMAND: LIST ---
 program
@@ -87,6 +88,20 @@ program
         console.log(`\x1b[35m[$] LOGIC_CLOCK: ${logicClock}\x1b[0m`);
         console.log("\x1b[90m--------------------------------------------------\x1b[0m");
 
+        // 🛡️ ENCODING & HASHING
+        const hashedId = ethers.id(id);
+        console.log(`⚓ TARGET ID HASH: ${hashedId}`);
+
+        // 🔍 STAGE 0: CHECK REGISTRY STATE
+        const silo = await engine.registry(hashedId);
+        if (silo.creator === ethers.ZeroAddress) {
+            console.log("⚠️  SILO UNINITIALIZED. ATTEMPTING GENESIS ANCHOR...");
+            const initTx = await engine.createSilo(hashedId, "ipfs://synthesis-genesis-v2-logic");
+            console.log(`[PENDING] Initialization: ${initTx.hash}`);
+            await initTx.wait();
+            console.log("✅ SILO INITIALIZED ON BASE.");
+        }
+
         // 🛡️ SETTLEMENT: SYNL ALLOWANCE
         const allowance = await token.allowance(wallet.address, REGISTRY_ADDRESS);
         if (allowance < ethers.parseEther("1")) {
@@ -106,12 +121,10 @@ program
         const auditorRes = await callBridge([{ role: "system", content: "Extract the BPS equivalent as a decimal number (0.0 to 1.0) only." }, { role: "user", content: mathOutput }], "grok-code-fast-1");
         
         const bpsDecimal = parseFloat(auditorRes.choices[0].message.content.match(/[\d.]+/)[0]) || 0;
-        const bpsInteger = Math.round(bpsDecimal * 10000); // 0.12 becomes 1200
-        const hashedId = ethers.id(id); // Keccak256 hash of the string ID
+        const bpsInteger = Math.round(bpsDecimal * 10000); 
         const certHash = ethers.keccak256(ethers.toUtf8Bytes(mathOutput));
 
         console.log(`📊 BPS SCALING: ${bpsDecimal} -> ${bpsInteger} units`);
-        console.log(`⚓ HASHED ID: ${hashedId}`);
 
         // ⚓ ANCHOR
         console.log(`>>> [ANCHOR] SETTLING 1 $SYNL ON BASE...`);
