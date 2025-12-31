@@ -12,13 +12,13 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 const program = new Command();
 const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_BASE_RPC_URL);
 
-// --- 🏛️ ADRESS ANCHORS FROM .ENV.LOCAL ---
+// --- 🏛️ ADDRESS ANCHORS ---
 const REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS;
 const SYNL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_SYNL_TOKEN_ADDRESS;
 
 const LEDGER_ABI = [
-    "function recordPulse(string id, uint256 bps, bytes32 certHash) external returns (bool)",
-    "function registry(string id) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)"
+    "function recordPulse(bytes32 id, uint256 bps, bytes32 certHash) external returns (bool)",
+    "function registry(bytes32 id) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)"
 ];
 
 const ERC20_ABI = [
@@ -40,7 +40,7 @@ const callBridge = async (messages, modelName) => {
 program
   .name('synthesis')
   .description('Sovereign Audit Engine - Genesis v2')
-  .version('2.0.1');
+  .version('2.0.2');
 
 // --- 📋 COMMAND: LIST ---
 program
@@ -78,7 +78,6 @@ program
         const logic = genesisData.find(item => item.outcome === id);
         if (!logic) throw new Error(`Logic ID "${id}" not found.`);
 
-        // Determine if input is file or raw string
         let inputContent = dataInput;
         if (fs.existsSync(dataInput)) {
             inputContent = fs.readFileSync(dataInput, 'utf8');
@@ -89,12 +88,10 @@ program
         console.log("\x1b[90m--------------------------------------------------\x1b[0m");
 
         // 🛡️ SETTLEMENT: SYNL ALLOWANCE
-        console.log(">>> [SETTLEMENT] VERIFYING $SYNL...");
         const allowance = await token.allowance(wallet.address, REGISTRY_ADDRESS);
         if (allowance < ethers.parseEther("1")) {
-            console.log("⚠️  ALLOWANCE NOT FOUND. AUTHORIZING $SYNL...");
-            const tx = await token.approve(REGISTRY_ADDRESS, ethers.parseUnits("1000", 18));
-            await tx.wait();
+            console.log(">>> [SETTLEMENT] AUTHORIZING $SYNL...");
+            await (await token.approve(REGISTRY_ADDRESS, ethers.parseUnits("1000", 18))).wait();
             console.log("✅ ALLOWANCE ANCHORED.");
         }
 
@@ -104,14 +101,21 @@ program
         const mathOutput = brainRes.choices[0].message.content;
         console.log(`\x1b[36m[BRAIN] CHATTER:\x1b[0m\n${mathOutput}\n`);
 
+        // 🛡️ AUDITOR: BPS PARSING & SCALING
         console.log(">>> [AUDITOR] VALIDATING PARITY...");
-        const auditorRes = await callBridge([{ role: "system", content: "Extract numeric BPS integer (0-10000) only." }, { role: "user", content: mathOutput }], "grok-code-fast-1");
-        const finalBps = parseInt(auditorRes.choices[0].message.content.match(/\d+/)[0]) || 0;
+        const auditorRes = await callBridge([{ role: "system", content: "Extract the BPS equivalent as a decimal number (0.0 to 1.0) only." }, { role: "user", content: mathOutput }], "grok-code-fast-1");
+        
+        const bpsDecimal = parseFloat(auditorRes.choices[0].message.content.match(/[\d.]+/)[0]) || 0;
+        const bpsInteger = Math.round(bpsDecimal * 10000); // 0.12 becomes 1200
+        const hashedId = ethers.id(id); // Keccak256 hash of the string ID
         const certHash = ethers.keccak256(ethers.toUtf8Bytes(mathOutput));
+
+        console.log(`📊 BPS SCALING: ${bpsDecimal} -> ${bpsInteger} units`);
+        console.log(`⚓ HASHED ID: ${hashedId}`);
 
         // ⚓ ANCHOR
         console.log(`>>> [ANCHOR] SETTLING 1 $SYNL ON BASE...`);
-        const tx = await engine.recordPulse(id, finalBps, certHash, { gasLimit: 500000 });
+        const tx = await engine.recordPulse(hashedId, bpsInteger, certHash, { gasLimit: 500000 });
         console.log(`\x1b[33m[PENDING] Pulse Sent: ${tx.hash}\x1b[0m`);
         await tx.wait();
 
