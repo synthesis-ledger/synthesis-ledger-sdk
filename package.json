@@ -1,14 +1,14 @@
 {
   "name": "synthesis-ledger-sdk",
-  "version": "2.0.1",
+  "version": "3.0.1",
   "type": "module",
   "bin": {
-    "synthesis": "bin/index.js"
+    "synl": "./bin/index.js",
+    "synl-check": "./interrogate.js"
   },
   "dependencies": {
     "commander": "^12.0.0",
-    "dotenv": "^16.6.1",
-    "ethers": "^6.16.0",
-    "node-fetch": "^3.3.2"
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0"
   }
 }

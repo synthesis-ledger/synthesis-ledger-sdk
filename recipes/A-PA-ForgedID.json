@@ -1,0 +1,72 @@
+{
+  "id": 24,
+  "successBps": 9952,
+  "cid": "ar://SYNTH_ATOMIC_PA_FORGEDID",
+  "costUsd": 1500,
+  "details": "# A-PA-ForgedID Technical Logic Specification\n\n## 1. System Definition\n\n**A-PA-ForgedID**: Authentication Pathway Analyzer for Forged Identity Detection\n\n### 1.1 Core Detection Logic\n\n```\nForgedID_Score = Σ(Wi × Ai) / Σ(Wi)\n\nWhere:\n- Wi = Weight factor for attribute i\n- Ai = Anomaly score for attribute i ∈ [0, 1]\n- Detection threshold θ = 0.73\n```\n\n### 1.2 Attribute Vector Components\n\n| Attribute ID | Description | Weight (Wi) | Detection Method |\n|--------------|-------------|-------------|------------------|\n| A01 | Token signature deviation | 0.95 | HMAC-SHA256 validation |\n| A02 | Temporal claim drift | 0.88 | NTP sync delta analysis |\n| A03 | Issuer chain integrity | 0.92 | X.509 path validation |\n| A04 | Behavioral fingerprint | 0.76 | ML classifier output |\n| A05 | Geographic impossibility | 0.84 | Velocity check algorithm |\n| A06 | Session binding violation | 0.91 | CSRF token correlation |\n| A07 | Credential age anomaly | 0.67 | Issuance timestamp analysis |\n| A08 | Multi-factor bypass pattern | 0.97 | MFA state machine audit |\n\n---\n\n## 2. Breakdown Point Score (BPS) Matrix\n\n### 2.1 BPS Calculation Formula\n\n```\nBPS(component) = (P_failure × I_severity × D_detection) / R_recovery\n\nWhere:\n- P_failure = Probability of failure [0, 1]\n- I_severity = Impact severity [1-10]\n- D_detection = Detection difficulty [1-10]  \n- R_recovery = Recovery capability [1-10]\n\nRisk Classification:\n- BPS < 2.0  → LOW\n- BPS 2.0-5.0 → MEDIUM\n- BPS 5.0-8.0 → HIGH\n- BPS > 8.0  → CRITICAL\n```\n\n### 2.2 Component BPS Matrix\n\n| Component | P_failure | I_severity | D_detection | R_recovery | BPS | Risk Level |\n|-----------|-----------|------------|-------------|------------|-----|------------|\n| Token Validator | 0.02 | 9 | 3 | 7 | 0.077 | LOW |\n| Signature Engine | 0.01 | 10 | 2 | 8 | 0.025 | LOW |\n| Session Store (Redis) | 0.08 | 8 | 4 | 6 | 0.427 | LOW |\n| ML Inference Pipeline | 0.15 | 6 | 7 | 4 | 1.575 | LOW |\n| Certificate Authority Link | 0.05 | 10 | 5 | 3 | 0.833 | LOW |\n| Geo-IP Resolution | 0.12 | 5 | 6 | 8 | 0.450 | LOW |\n| MFA State Machine | 0.03 | 10 | 8 | 5 | 0.480 | LOW |\n| Audit Log Pipeline | 0.07 | 7 | 9 | 6 | 0.735 | LOW |\n| Rate Limiter | 0.04 | 8 | 3 | 9 | 0.107 | LOW |\n| Database Connection Pool | 0.06 | 9 | 4 | 4 | 0.540 | LOW |\n| External IdP Federation | 0.18 | 8 | 6 | 3 | 2.880 | MEDIUM |\n| Key Management Service | 0.02 | 10 | 9 | 2 | 0.900 | LOW |\n| Network Egress Filter | 0.09 | 7 | 8 | 5 | 1.008 | LOW |\n| Cascading Auth Failure | 0.11 | 10 | 7 | 2 | 3.850 | MEDIUM |\n| Cold Start Latency Spike | 0.22 | 4 | 2 | 9 | 0.196 | LOW |\n\n### 2.3 Aggregate System BPS\n\n```\nSystem_BPS = √(Σ(BPSi²) / n) = √(14.083 / 15) = 0.969\n\nSystem Risk Classification: LOW-MEDIUM boundary\nCritical Path BPS: max(BPS_critical_path) = 3.850\n```\n\n---\n\n## 3. JSON Schema for Input Validation\n\n```json\n{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://sre.internal/schemas/a-pa-forgedid/v1\",\n  \"title\": \"A-PA-ForgedID Authentication Request\",\n  \"type\": \"object\",\n  \"required\": [\n    \"request_id\",\n    \"timestamp\",\n    \"identity_claim\",\n    \"authentication_context\",\n    \"client_metadata\"\n  ],\n  \"properties\": {\n    \"request_id\": {\n      \"type\": \"string\",\n      \"format\": \"uuid\",\n      \"description\": \"Unique request identifier (UUIDv4)\"\n    },\n    \"timestamp\": {\n      \"type\": \"string\",\n      \"format\": \"date-time\",\n      \"description\": \"ISO 8601 timestamp with timezone\"\n    },\n    \"identity_claim\": {\n      \"type\": \"object\",\n      \"required\": [\"token\", \"token_type\", \"issuer\"],\n      \"properties\": {\n        \"token\": {\n          \"type\": \"string\",\n          \"minLength\": 32,\n          \"maxLength\": 8192,\n          \"pattern\": \"^[A-Za-z0-9_-]+\\\\.[A-Za-z0-9_-]+\\\\.[A-Za-z0-9_-]*$\"\n        },\n        \"token_type\": {\n          \"type\": \"string\",\n          \"enum\": [\"JWT\", \"SAML\", \"OIDC\", \"PASETO\", \"CUSTOM\"]\n        },\n        \"issuer\": {\n          \"type\": \"string\",\n          \"format\": \"uri\",\n          \"maxLength\": 2048\n        },\n        \"subject\": {\n          \"type\": \"string\",\n          \"maxLength\": 256\n        },\n        \"audience\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\",\n            \"format\": \"uri\"\n          },\n          \"minItems\": 1,\n          \"maxItems\": 10\n        },\n        \"issued_at\": {\n          \"type\": \"integer\",\n          \"minimum\": 0\n        },\n        \"expires_at\": {\n          \"type\": \"integer\",\n          \"minimum\": 0\n        },\n        \"not_before\": {\n          \"type\": \"integer\",\n          \"minimum\": 0\n        }\n      },\n      \"additionalProperties\": false\n    },\n    \"authentication_context\": {\n      \"type\": \"object\",\n      \"required\": [\"auth_method\", \"auth_level\"],\n      \"properties\": {\n        \"auth_method\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"password\",\n            \"mfa_totp\",\n            \"mfa_sms\",\n            \"mfa_push\",\n            \"webauthn\",\n            \"certificate\",\n            \"federated\",\n            \"api_key\"\n          ]\n        },\n        \"auth_level\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 4,\n          \"description\": \"AAL level per NIST SP 800-63B\"\n        },\n        \"mfa_verified\": {\n          \"type\": \"boolean\"\n        },\n        \"session_id\": {\n          \"type\": \"string\",\n          \"pattern\": \"^[a-f0-9]{64}$\"\n        },\n        \"previous_auth_timestamp\": {\n          \"type\": \"string\",\n          \"format\": \"date-time\"\n        },\n        \"step_up_required\": {\n          \"type\": \"boolean\",\n          \"default\": false\n        }\n      },\n      \"additionalProperties\": false\n    },\n    \"client_metadata\": {\n      \"type\": \"object\",\n      \"required\": [\"ip_address\", \"user_agent\"],\n      \"properties\": {\n        \"ip_address\": {\n          \"type\": \"string\",\n          \"oneOf\": [\n            {\"format\": \"ipv4\"},\n            {\"format\": \"ipv6\"}\n          ]\n        },\n        \"user_agent\": {\n          \"type\": \"string\",\n          \"maxLength\": 1024\n        },\n        \"device_fingerprint\": {\n          \"type\": \"string\",\n          \"pattern\": \"^[a-f0-9]{64}$\"\n        },\n        \"geo_location\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"country_code\": {\n              \"type\": \"string\",\n              \"pattern\": \"^[A-Z]{2}$\"\n            },\n            \"region\": {\n              \"type\": \"string\",\n              \"maxLength\": 128\n            },\n            \"latitude\": {\n              \"type\": \"number\",\n              \"minimum\": -90,\n              \"maximum\": 90\n            },\n            \"longitude\": {\n              \"type\": \"number\",\n              \"minimum\": -180,\n              \"maximum\": 180\n            },\n            \"accuracy_radius_km\": {\n              \"type\": \"number\",\n              \"minimum\": 0\n            }\n          }\n        },\n        \"tls_fingerprint\": {\n          \"type\": \"string\",\n          \"pattern\": \"^[a-f0-9]{32}$\"\n        },\n        \"request_headers_hash\": {\n          \"type\": \"string\",\n          \"pattern\": \"^[a-f0-9]{64}$\"\n        }\n      },\n      \"additionalProperties\": false\n    },\n    \"risk_signals\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"velocity_check_passed\": {\n          \"type\": \"boolean\"\n        },\n        \"known_device\": {\n          \"type\": \"boolean\"\n        },\n        \"behavioral_score\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1\n        },\n        \"threat_intel_flags\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"tor_exit_node\",\n              \"vpn_detected\",\n              \"proxy_detected\",\n              \"datacenter_ip\",\n              \"known_bad_actor\",\n              \"credential_stuffing_pattern\",\n              \"bot_signature\"\n            ]\n          }\n        }\n      },\n      \"additionalProperties\": false\n    }\n  },\n  \"additionalProperties\": false\n}\n```\n\n---\n\n## 4. SRE Metrics Specification\n\n### 4.1 Service Level Indicators (SLIs)\n\n| Metric ID | Metric Name | Calculation | Unit |\n|-----------|-------------|-------------|------|\n| SLI-001 | Request Latency P50 | `histogram_quantile(0.50, rate(forgedid_request_duration_seconds_bucket[5m]))` | seconds |\n| SLI-002 | Request Latency P99 | `histogram_quantile(0.99, rate(forgedid_request_duration_seconds_bucket[5m]))` | seconds |\n| SLI-003 | Availability | `1 - (sum(forgedid_errors_total) / sum(forgedid_requests_total))` | ratio |\n| SLI-004 | Detection Accuracy | `forgedid_true_positives / (forgedid_true_positives + forgedid_false_positives)` | ratio |\n| SLI-005 | False Negative Rate | `forgedid_false_negatives / (forgedid_true_positives + forgedid_false_negatives)` | ratio |\n| SLI-006 | Throughput | `rate(forgedid_requests_total[1m])` | req/s |\n\n### 4.2 Service Level Objectives (SLOs)\n\n| SLO ID | Target | Error Budget (30d) | Burn Rate Alert |\n|--------|--------|-------------------|-----------------|\n| SLO-LATENCY-P50 | ≤ 15ms | 43,200 minutes | 14.4x (1h), 6x (6h) |\n| SLO-LATENCY-P99 | ≤ 150ms | 43,200 minutes | 14.4x (1h), 6x (6h) |\n| SLO-AVAILABILITY | ≥ 99.95% | 21.6 minutes | 14.4x (1h), 6x (6h) |\n| SLO-DETECTION-ACCURACY | ≥ 99.7% | 129.6 minutes | 10x (1h), 4x (6h) |\n| SLO-FALSE-NEGATIVE | ≤ 0.01% | 4.32 minutes | 20x (15m), 10x (1h) |\n\n### 4.3 Operational Metrics Dashboard\n\n```yaml\nmetrics:\n  # Counter Metrics\n  - name: forgedid_requests_total\n    type: counter\n    labels: [endpoint, token_type, auth_method, result]\n    \n  - name: forgedid_detections_total\n    type: counter\n    labels: [detection_type, severity, action_taken]\n    \n  - name: forgedid_validation_errors_total\n    type: counter\n    labels: [error_type, attribute_id]\n\n  # Histogram Metrics\n  - name: forgedid_request_duration_seconds\n    type: histogram\n    buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0]\n    labels: [endpoint, token_type]\n    \n  - name: forgedid_ml_inference_duration_seconds\n    type: histogram\n    buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1]\n    labels: [model_version]\n\n  # Gauge Metrics\n  - name: forgedid_active_sessions\n    type: gauge\n    labels: [auth_level]\n    \n  - name: forgedid_circuit_breaker_state\n    type: gauge\n    labels: [component]\n    values: {closed: 0, half_open: 1, open: 2}\n    \n  - name: forgedid_cache_hit_ratio\n    type: gauge\n    labels: [cache_type]\n\n  # Summary Metrics\n  - name: forgedid_score_distribution\n    type: summary\n    quantiles: [0.5, 0.9, 0.95, 0.99]\n    labels: [outcome]\n```\n\n### 4.4 Alert Definitions\n\n```yaml\nalerts:\n  - name: ForgedIDHighLatency\n    expr: |\n      histogram_quantile(0.99, \n        rate(forgedid_request_duration_seconds_bucket[5m])\n      ) > 0.15\n    for: 5m\n    severity: warning\n    \n  - name: ForgedIDErrorBudgetBurn\n    expr: |\n      (\n        1 - (\n          sum(rate(forgedid_requests_total{result=\"success\"}[1h])) /\n          sum(rate(forgedid_requests_total[1h]))\n        )\n      ) > (14.4 * 0.0005)\n    for: 5m\n    severity: critical\n    \n  - name: ForgedIDFalseNegativeSpike\n    expr: |\n      rate(forgedid_detections_total{detection_type=\"false_negative\"}[15m]) /\n      rate(forgedid_requests_total[15m]) > 0.0001\n    for: 5m\n    severity: critical\n    \n  - name: ForgedIDCircuitBreakerOpen\n    expr: forgedid_circuit_breaker_state == 2\n    for: 1m\n    severity: warning\n    \n  - name: ForgedIDMLModelDrift\n    expr: |\n      abs(\n        avg\n```\n\n## 3. Resilience Layer\n- **Noise_Tolerance**: 0.15\n- **Confidence_Threshold**: 0.85\n- **Logic_Smoothing**: Bayesian",
+  "outcome": "A-PA-ForgedID",
+  "rType": 0,
+  "persona": "PA",
+  "primary_model": "GPT-4o-Synthesis",
+  "privacy_tier": "Public",
+  "sybox_fee_split": {
+    "dev": 0.5,
+    "curation": 0.4,
+    "author": 0.1
+  },
+  "ticker": "SYNL",
+  "audit_cadence": "Weekly",
+  "lifecycle": "Genesis-Platinum",
+  "global_outputs": [
+    "synthesis_id",
+    "logic_id",
+    "bps_verified",
+    "model_stack",
+    "processing_ms",
+    "timestamp"
+  ],
+  "custom_outputs": [
+    {
+      "field_name": "identity_risk_score",
+      "type": "Float",
+      "description": "Final normalized ForgedID_Score (0.0–1.0).",
+      "downstream_intent": "Auth Service Provider",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "anomaly_vector_summary",
+      "type": "Array",
+      "description": "Top 3 attributes contributing most to risk (e.g., A05, A08).",
+      "downstream_intent": "Fraud Analyst Persona",
+      "bps_sensitivity": "Medium"
+    },
+    {
+      "field_name": "trust_confidence_level",
+      "type": "Float",
+      "description": "Statistical confidence in the 'ALLOW'/'DENY' decision.",
+      "downstream_intent": "Risk Management Unit",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "geospatial_velocity_delta",
+      "type": "Object",
+      "description": "Time/Distance feasibility calculation between sessions.",
+      "downstream_intent": "Geo-Fence Logic",
+      "bps_sensitivity": "Medium"
+    },
+    {
+      "field_name": "mfa_state_integrity",
+      "type": "Boolean",
+      "description": "Verification that MFA state machine was not bypassed.",
+      "downstream_intent": "Security Policy Engine",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "session_correlation_id",
+      "type": "String",
+      "description": "UUID binding the current auth attempt to a verified device.",
+      "downstream_intent": "Session Manager",
+      "bps_sensitivity": "Low"
+    }
+  ]
+}

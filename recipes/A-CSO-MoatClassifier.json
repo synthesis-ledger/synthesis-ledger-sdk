@@ -1,0 +1,65 @@
+{
+  "id": 86,
+  "successBps": 9605,
+  "cid": "ar://SYNTH_ATOMIC_CSO_MOATCLASSIFIER",
+  "costUsd": 1500,
+  "details": "# A-CSO-MoatClassifier Technical Specification\n\n## 1. Core Classification Logic\n\n### 1.1 Moat Category Enumeration\n\n```\nMOAT_CATEGORIES = {\n    0: \"NO_MOAT\",\n    1: \"NETWORK_EFFECTS\",\n    2: \"SWITCHING_COSTS\", \n    3: \"COST_ADVANTAGES\",\n    4: \"INTANGIBLE_ASSETS\",\n    5: \"EFFICIENT_SCALE\",\n    6: \"COMPOSITE_MOAT\"\n}\n```\n\n### 1.2 Classification Function\n\n```\nf(x) = argmax(Σᵢ wᵢ · σ(θᵢᵀx + bᵢ))\n\nWhere:\n- x ∈ ℝⁿ = input feature vector\n- wᵢ = category weight for moat type i\n- θᵢ = learned parameter vector for category i\n- bᵢ = bias term\n- σ = sigmoid activation: σ(z) = 1/(1 + e⁻ᶻ)\n```\n\n### 1.3 Moat Strength Score (MSS)\n\n```\nMSS = Σⱼ₌₁ᵐ (Dⱼ · Sⱼ · Tⱼ) / m\n\nWhere:\n- Dⱼ = Durability factor [0,1] for attribute j\n- Sⱼ = Sustainability coefficient [0,1]\n- Tⱼ = Threat resistance score [0,1]\n- m = total evaluated attributes\n\nFinal Classification Threshold:\n- MSS < 0.25 → NO_MOAT\n- MSS ∈ [0.25, 0.50) → WEAK_MOAT\n- MSS ∈ [0.50, 0.75) → MODERATE_MOAT\n- MSS ≥ 0.75 → STRONG_MOAT\n```\n\n---\n\n## 2. Breakdown Point Score (BPS) Matrix\n\n### 2.1 Risk Category Definitions\n\n| Risk ID | Category | Description | Weight (λ) |\n|---------|----------|-------------|------------|\n| R001 | DATA_INTEGRITY | Input data corruption/staleness | 0.25 |\n| R002 | MODEL_DRIFT | Classification accuracy degradation | 0.20 |\n| R003 | LATENCY_BREACH | Response time SLA violation | 0.15 |\n| R004 | THROUGHPUT_COLLAPSE | Request processing capacity failure | 0.15 |\n| R005 | DEPENDENCY_FAILURE | Upstream/downstream service outage | 0.10 |\n| R006 | RESOURCE_EXHAUSTION | Memory/CPU/storage depletion | 0.10 |\n| R007 | SECURITY_BREACH | Authentication/authorization failure | 0.05 |\n\n### 2.2 BPS Calculation Matrix\n\n```\nBPS(t) = Σᵢ₌₁⁷ λᵢ · Pᵢ(t) · Iᵢ\n\nWhere:\n- λᵢ = risk weight from table above\n- Pᵢ(t) = probability of risk i at time t\n- Iᵢ = impact severity [1-10]\n\nOperational State Thresholds:\n- BPS < 2.0  → NOMINAL\n- BPS ∈ [2.0, 4.0) → DEGRADED\n- BPS ∈ [4.0, 7.0) → CRITICAL\n- BPS ≥ 7.0 → FAILURE\n```\n\n### 2.3 Full BPS Matrix\n\n```\n┌─────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┐\n│ State   │ R001   │ R002   │ R003   │ R004   │ R005   │ R006   │ R007   │\n├─────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┤\n│ NOMINAL │ P<0.05 │ P<0.03 │ P<0.02 │ P<0.02 │ P<0.01 │ P<0.01 │ P<0.001│\n│         │ I≤2    │ I≤2    │ I≤3    │ I≤3    │ I≤4    │ I≤4    │ I≤5    │\n├─────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┤\n│ DEGRADED│ P<0.15 │ P<0.10 │ P<0.08 │ P<0.08 │ P<0.05 │ P<0.05 │ P<0.01 │\n│         │ I≤5    │ I≤5    │ I≤5    │ I≤5    │ I≤6    │ I≤6    │ I≤7    │\n├─────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┤\n│ CRITICAL│ P<0.40 │ P<0.30 │ P<0.25 │ P<0.25 │ P<0.20 │ P<0.20 │ P<0.05 │\n│         │ I≤8    │ I≤8    │ I≤7    │ I≤7    │ I≤8    │ I≤8    │ I≤9    │\n├─────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┤\n│ FAILURE │ P≥0.40 │ P≥0.30 │ P≥0.25 │ P≥0.25 │ P≥0.20 │ P≥0.20 │ P≥0.05 │\n│         │ I>8    │ I>8    │ I>7    │ I>7    │ I>8    │ I>8    │ I>9    │\n└─────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┘\n```\n\n### 2.4 Cascading Failure Probability\n\n```\nP_cascade(n) = 1 - ∏ᵢ₌₁ⁿ (1 - Pᵢ · Cᵢⱼ)\n\nWhere:\n- Cᵢⱼ = correlation coefficient between risk i and j\n- n = number of active risk factors\n\nCorrelation Matrix Cᵢⱼ:\n     R001  R002  R003  R004  R005  R006  R007\nR001 1.00  0.65  0.20  0.15  0.30  0.25  0.10\nR002 0.65  1.00  0.35  0.25  0.20  0.15  0.05\nR003 0.20  0.35  1.00  0.80  0.45  0.70  0.15\nR004 0.15  0.25  0.80  1.00  0.50  0.75  0.10\nR005 0.30  0.20  0.45  0.50  1.00  0.40  0.20\nR006 0.25  0.15  0.70  0.75  0.40  1.00  0.15\nR007 0.10  0.05  0.15  0.10  0.20  0.15  1.00\n```\n\n---\n\n## 3. Input Validation JSON Schema\n\n```json\n{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://sre.internal/schemas/a-cso-moat-classifier/v1\",\n  \"title\": \"A-CSO-MoatClassifier Input Schema\",\n  \"type\": \"object\",\n  \"required\": [\n    \"request_id\",\n    \"timestamp\",\n    \"entity\",\n    \"moat_indicators\",\n    \"financial_metrics\"\n  ],\n  \"properties\": {\n    \"request_id\": {\n      \"type\": \"string\",\n      \"pattern\": \"^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$\",\n      \"description\": \"UUID v4 format request identifier\"\n    },\n    \"timestamp\": {\n      \"type\": \"string\",\n      \"format\": \"date-time\",\n      \"description\": \"ISO 8601 timestamp with timezone\"\n    },\n    \"entity\": {\n      \"type\": \"object\",\n      \"required\": [\"id\", \"type\", \"sector\"],\n      \"properties\": {\n        \"id\": {\n          \"type\": \"string\",\n          \"minLength\": 1,\n          \"maxLength\": 64\n        },\n        \"type\": {\n          \"type\": \"string\",\n          \"enum\": [\"PUBLIC_COMPANY\", \"PRIVATE_COMPANY\", \"SUBSIDIARY\", \"DIVISION\"]\n        },\n        \"sector\": {\n          \"type\": \"string\",\n          \"enum\": [\n            \"TECHNOLOGY\", \"HEALTHCARE\", \"FINANCIALS\", \"CONSUMER_DISCRETIONARY\",\n            \"CONSUMER_STAPLES\", \"INDUSTRIALS\", \"ENERGY\", \"MATERIALS\",\n            \"UTILITIES\", \"REAL_ESTATE\", \"COMMUNICATION_SERVICES\"\n          ]\n        },\n        \"market_cap_usd\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1e15\n        }\n      }\n    },\n    \"moat_indicators\": {\n      \"type\": \"object\",\n      \"required\": [\"network_effects\", \"switching_costs\", \"cost_advantages\", \"intangible_assets\", \"efficient_scale\"],\n      \"properties\": {\n        \"network_effects\": {\n          \"$ref\": \"#/$defs/moat_indicator\"\n        },\n        \"switching_costs\": {\n          \"$ref\": \"#/$defs/moat_indicator\"\n        },\n        \"cost_advantages\": {\n          \"$ref\": \"#/$defs/moat_indicator\"\n        },\n        \"intangible_assets\": {\n          \"$ref\": \"#/$defs/moat_indicator\"\n        },\n        \"efficient_scale\": {\n          \"$ref\": \"#/$defs/moat_indicator\"\n        }\n      }\n    },\n    \"financial_metrics\": {\n      \"type\": \"object\",\n      \"required\": [\"roic\", \"revenue_growth_5y\", \"gross_margin\", \"operating_margin\"],\n      \"properties\": {\n        \"roic\": {\n          \"type\": \"number\",\n          \"minimum\": -1.0,\n          \"maximum\": 2.0,\n          \"description\": \"Return on Invested Capital as decimal\"\n        },\n        \"revenue_growth_5y\": {\n          \"type\": \"number\",\n          \"minimum\": -1.0,\n          \"maximum\": 10.0,\n          \"description\": \"5-year CAGR as decimal\"\n        },\n        \"gross_margin\": {\n          \"type\": \"number\",\n          \"minimum\": -1.0,\n          \"maximum\": 1.0\n        },\n        \"operating_margin\": {\n          \"type\": \"number\",\n          \"minimum\": -2.0,\n          \"maximum\": 1.0\n        },\n        \"fcf_margin\": {\n          \"type\": \"number\",\n          \"minimum\": -2.0,\n          \"maximum\": 1.0\n        },\n        \"debt_to_equity\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 100\n        }\n      }\n    },\n    \"competitive_data\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"market_share\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1.0\n        },\n        \"competitor_count\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 10000\n        },\n        \"hhi_index\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 10000,\n          \"description\": \"Herfindahl-Hirschman Index\"\n        },\n        \"years_of_dominance\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 200\n        }\n      }\n    },\n    \"metadata\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"source\": {\n          \"type\": \"string\",\n          \"maxLength\": 128\n        },\n        \"confidence_level\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1.0\n        },\n        \"data_freshness_hours\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 8760\n        }\n      }\n    }\n  },\n  \"$defs\": {\n    \"moat_indicator\": {\n      \"type\": \"object\",\n      \"required\": [\"score\", \"confidence\"],\n      \"properties\": {\n        \"score\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1.0,\n          \"description\": \"Normalized indicator strength\"\n        },\n        \"confidence\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1.0,\n          \"description\": \"Data confidence level\"\n        },\n        \"evidence_count\": {\n          \"type\": \"integer\",\n          \"minimum\": 0,\n          \"maximum\": 1000\n        },\n        \"trend\": {\n          \"type\": \"string\",\n          \"enum\": [\"IMPROVING\", \"STABLE\", \"DECLINING\", \"UNKNOWN\"]\n        },\n        \"sub_indicators\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"name\": {\"type\": \"string\"},\n              \"value\": {\"type\": \"number\"},\n              \"weight\": {\"type\": \"number\", \"minimum\": 0, \"maximum\": 1}\n            }\n          },\n          \"maxItems\": 20\n        }\n      }\n    }\n  },\n  \"additionalProperties\": false\n}\n```\n\n---\n\n## 4. Output Schema\n\n```json\n{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"$id\": \"https://sre.internal/schemas/a-cso-moat-classifier/v1/output\",\n  \"title\": \"A-CSO-MoatClassifier Output Schema\",\n  \"type\": \"object\",\n  \"required\": [\n    \"request_id\",\n    \"classification\",\n    \"scores\",\n    \"processing_metadata\"\n  ],\n  \"properties\": {\n    \"request_id\": {\n      \"type\": \"string\"\n    },\n    \"classification\": {\n      \"type\": \"object\",\n      \"required\": [\"primary_moat\", \"moat_strength\", \"confidence\"],\n      \"properties\": {\n        \"primary_moat\": {\n          \"type\": \"string\",\n          \"enum\": [\"NO_MOAT\", \"NETWORK_EFFECTS\", \"SWITCHING_COSTS\", \"COST_ADVANTAGES\", \"INTANGIBLE_ASSETS\", \"EFFICIENT_SCALE\", \"COMPOSITE_MOAT\"]\n        },\n        \"secondary_moats\": {\n          \"type\": \"array\",\n          \"items\": {\"type\": \"string\"}\n        },\n        \"moat_strength\": {\n          \"type\": \"string\",\n          \"enum\": [\"NONE\", \"WEAK\", \"MODERATE\", \"STRONG\"]\n        },\n        \"confidence\": {\n          \"type\": \"number\",\n          \"minimum\": 0,\n          \"maximum\": 1.0\n        }\n      }\n    },\n    \"scores\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"mss\": {\n          \"type\": \"number\",\n          \"description\": \"Moat\n```}}}}}]]]]",
+  "outcome": "A-CSO-MoatClassifier",
+  "rType": 0,
+  "persona": "CSO",
+  "primary_model": "GPT-4o-Synthesis",
+  "privacy_tier": "Public",
+  "sybox_fee_split": {
+    "dev": 0.5,
+    "curation": 0.4,
+    "author": 0.1
+  },
+  "ticker": "SYNL",
+  "audit_cadence": "Weekly",
+  "lifecycle": "Genesis-Platinum",
+  "global_outputs": [
+    "synthesis_id",
+    "logic_id",
+    "bps_verified",
+    "model_stack",
+    "processing_ms",
+    "timestamp"
+  ],
+  "custom_outputs": [
+    {
+      "field_name": "primary_classification",
+      "type": "String",
+      "description": "The dominant moat type (e.g., \"COMPOSITE_MOAT\").",
+      "downstream_intent": "Executive Dashboards",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "mss_vector_pack",
+      "type": "Object",
+      "description": "Combined MSS score (0-1) and durability/sustainability coefficients.",
+      "downstream_intent": "`A-CFO-YieldForecaster`",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "threat_resistance_index",
+      "type": "Object",
+      "description": "Scores for disruption, erosion, and regulatory risks.",
+      "downstream_intent": "Risk Committees",
+      "bps_sensitivity": "Medium"
+    },
+    {
+      "field_name": "financial_alignment_scores",
+      "type": "Object",
+      "description": "ROIC vs WACC spread and growth quality indices.",
+      "downstream_intent": "`A-CEO-StrategyLinter`",
+      "bps_sensitivity": "Medium"
+    },
+    {
+      "field_name": "adversarial_focus_areas",
+      "type": "Array",
+      "description": "High-priority vulnerabilities identified for monitoring.",
+      "downstream_intent": "`A-CSO-VectorGen`",
+      "bps_sensitivity": "High"
+    }
+  ]
+}

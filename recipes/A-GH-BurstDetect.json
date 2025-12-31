@@ -1,0 +1,72 @@
+{
+  "id": 73,
+  "successBps": 9642,
+  "cid": "ar://SYNTH_ATOMIC_GH_BURSTDETECT",
+  "costUsd": 1500,
+  "details": "# A-GH-BurstDetect Technical Specification\n\n## System Overview\nAnomaly-Guided Heuristic Burst Detection module for identifying traffic/event burst patterns in streaming data pipelines.\n\n---\n\n## JSON Schema Definitions\n\n### Input Event Schema\n```json\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"$id\": \"agh-burstdetect-input-v1\",\n  \"type\": \"object\",\n  \"required\": [\"event_id\", \"timestamp\", \"source_id\", \"value\"],\n  \"properties\": {\n    \"event_id\": { \"type\": \"string\", \"format\": \"uuid\" },\n    \"timestamp\": { \"type\": \"integer\", \"minimum\": 0, \"description\": \"Unix epoch ms\" },\n    \"source_id\": { \"type\": \"string\", \"maxLength\": 64 },\n    \"value\": { \"type\": \"number\" },\n    \"dimensions\": {\n      \"type\": \"object\",\n      \"additionalProperties\": { \"type\": \"string\" }\n    },\n    \"priority\": { \"type\": \"integer\", \"minimum\": 0, \"maximum\": 10, \"default\": 5 }\n  }\n}\n```\n\n### Burst Detection Output Schema\n```json\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"$id\": \"agh-burstdetect-output-v1\",\n  \"type\": \"object\",\n  \"required\": [\"burst_id\", \"detected_at\", \"severity\", \"metrics\"],\n  \"properties\": {\n    \"burst_id\": { \"type\": \"string\", \"format\": \"uuid\" },\n    \"detected_at\": { \"type\": \"integer\" },\n    \"window_start\": { \"type\": \"integer\" },\n    \"window_end\": { \"type\": \"integer\" },\n    \"severity\": { \"enum\": [\"LOW\", \"MEDIUM\", \"HIGH\", \"CRITICAL\"] },\n    \"confidence\": { \"type\": \"number\", \"minimum\": 0, \"maximum\": 1 },\n    \"affected_sources\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"metrics\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"baseline_rate\": { \"type\": \"number\" },\n        \"burst_rate\": { \"type\": \"number\" },\n        \"deviation_factor\": { \"type\": \"number\" },\n        \"z_score\": { \"type\": \"number\" },\n        \"event_count\": { \"type\": \"integer\" }\n      }\n    },\n    \"heuristic_flags\": {\n      \"type\": \"array\",\n      \"items\": { \"enum\": [\"SUDDEN_SPIKE\", \"SUSTAINED_ELEVATION\", \"OSCILLATION\", \"CASCADE\", \"ANOMALY_CLUSTER\"] }\n    }\n  }\n}\n```\n\n### Configuration Schema\n```json\n{\n  \"$id\": \"agh-burstdetect-config-v1\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"window_size_ms\": { \"type\": \"integer\", \"default\": 60000 },\n    \"slide_interval_ms\": { \"type\": \"integer\", \"default\": 5000 },\n    \"baseline_window_count\": { \"type\": \"integer\", \"default\": 10 },\n    \"z_threshold\": { \"type\": \"number\", \"default\": 3.0 },\n    \"min_event_threshold\": { \"type\": \"integer\", \"default\": 100 },\n    \"ewma_alpha\": { \"type\": \"number\", \"minimum\": 0, \"maximum\": 1, \"default\": 0.3 },\n    \"severity_thresholds\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"low\": { \"type\": \"number\", \"default\": 2.0 },\n        \"medium\": { \"type\": \"number\", \"default\": 3.0 },\n        \"high\": { \"type\": \"number\", \"default\": 4.5 },\n        \"critical\": { \"type\": \"number\", \"default\": 6.0 }\n      }\n    }\n  }\n}\n```\n\n---\n\n## Core Detection Logic\n\n### Statistical Formulas\n\n**Baseline Rate Calculation (EWMA):**\n```\nμ_t = α × r_t + (1 - α) × μ_{t-1}\n```\n\n**Variance Tracking:**\n```\nσ²_t = α × (r_t - μ_t)² + (1 - α) × σ²_{t-1}\n```\n\n**Z-Score Computation:**\n```\nZ = (r_current - μ_baseline) / σ_baseline\n```\n\n**Burst Confidence Score:**\n```\nC = min(1, (Z - Z_threshold) / Z_threshold) × (1 - e^{-n/n_min})\n\nwhere:\n  n = event count in window\n  n_min = min_event_threshold\n```\n\n**Deviation Factor:**\n```\nD = r_current / max(μ_baseline, ε)\n\nwhere ε = 1e-10 (floor value)\n```\n\n### Heuristic Classification Logic\n\n```\nSUDDEN_SPIKE:     Z > Z_crit AND Δr/Δt > 2σ/window_size\nSUSTAINED_ELEVATION: Z > Z_high FOR consecutive_windows >= 3\nOSCILLATION:      |Z_t - Z_{t-1}| > 2σ FOR alternating_count >= 4\nCASCADE:          affected_source_count > source_threshold AND temporal_spread < cascade_window\nANOMALY_CLUSTER:  spatial_density(anomalies) > cluster_threshold\n```\n\n### Severity Mapping Function\n```\nS(Z) = \n  CRITICAL  if Z >= 6.0\n  HIGH      if Z >= 4.5\n  MEDIUM    if Z >= 3.0\n  LOW       if Z >= 2.0\n  NONE      otherwise\n```\n\n---\n\n## SRE Metrics & Observability\n\n### Golden Signals\n\n| Metric | Type | Labels | Description |\n|--------|------|--------|-------------|\n| `agh_burstdetect_events_processed_total` | Counter | `source_id`, `status` | Total events ingested |\n| `agh_burstdetect_bursts_detected_total` | Counter | `severity`, `heuristic_type` | Burst detections by class |\n| `agh_burstdetect_processing_latency_seconds` | Histogram | `quantile` | End-to-end detection latency |\n| `agh_burstdetect_window_saturation_ratio` | Gauge | `window_id` | Buffer utilization per window |\n| `agh_burstdetect_baseline_drift` | Gauge | `source_id` | μ_t deviation from long-term mean |\n| `agh_burstdetect_false_positive_rate` | Gauge | — | FP rate from feedback loop |\n\n### SLI/SLO Definitions\n\n| SLI | Target SLO | Burn Rate Alert |\n|-----|------------|-----------------|\n| Detection Latency P99 | < 500ms | 2% budget/hr |\n| Event Processing Success Rate | 99.95% | 0.1% budget/hr |\n| Burst Detection Recall | > 98% | N/A (offline eval) |\n| False Positive Rate | < 5% | 1% budget/day |\n\n### Alert Rules (PromQL)\n\n```promql\n# High latency\nhistogram_quantile(0.99, rate(agh_burstdetect_processing_latency_seconds_bucket[5m])) > 0.5\n\n# Elevated error rate\nsum(rate(agh_burstdetect_events_processed_total{status=\"error\"}[5m])) \n/ sum(rate(agh_burstdetect_events_processed_total[5m])) > 0.001\n\n# Burst storm (meta-detection)\nsum(rate(agh_burstdetect_bursts_detected_total{severity=~\"HIGH|CRITICAL\"}[5m])) > 10\n\n# Baseline instability\nabs(delta(agh_burstdetect_baseline_drift[10m])) > 0.5\n```\n\n---\n\n## State Machine\n\n```\nStates: INITIALIZING → BASELINE_LEARNING → ACTIVE → BURST_DETECTED → COOLDOWN → ACTIVE\n\nTransitions:\n  INITIALIZING → BASELINE_LEARNING: config_loaded ∧ stream_connected\n  BASELINE_LEARNING → ACTIVE: window_count >= baseline_window_count\n  ACTIVE → BURST_DETECTED: Z >= Z_threshold ∧ n >= n_min\n  BURST_DETECTED → COOLDOWN: burst_emitted\n  COOLDOWN → ACTIVE: cooldown_timer_expired ∨ Z < Z_threshold - hysteresis\n```\n\n---\n\n## Data Flow DAG\n\n```\n[Ingress] → [Partitioner] → [Window Aggregator] → [Baseline Engine]\n                                    ↓                    ↓\n                            [Z-Score Calculator] ← [μ, σ Provider]\n                                    ↓\n                            [Heuristic Classifier]\n                                    ↓\n                            [Severity Mapper] → [Output Emitter] → [Downstream]\n                                    ↓\n                            [Metrics Exporter]\n```\n\n---\n\n## Resource Constraints\n\n| Parameter | Value | Rationale |\n|-----------|-------|-----------|\n| Max Memory per Partition | 256 MB | Window buffer bounds |\n| Max Window Cardinality | 10,000 sources | Hash map sizing |\n| Checkpoint Interval | 30s | Recovery point objective |\n| Backpressure Threshold | 80% buffer | Flow control trigger |\n| Max Event Lag | 5 × window_size | Late arrival tolerance |",
+  "outcome": "A-GH-BurstDetect",
+  "rType": 0,
+  "persona": "GH",
+  "primary_model": "Grok-3-Extraction",
+  "privacy_tier": "Public",
+  "sybox_fee_split": {
+    "dev": 0.5,
+    "curation": 0.4,
+    "author": 0.1
+  },
+  "ticker": "SYNL",
+  "audit_cadence": "Weekly",
+  "lifecycle": "Genesis-Platinum",
+  "global_outputs": [
+    "synthesis_id",
+    "logic_id",
+    "bps_verified",
+    "model_stack",
+    "processing_ms",
+    "timestamp"
+  ],
+  "custom_outputs": [
+    {
+      "field_name": "Type",
+      "type": "Description",
+      "description": "Downstream Intent",
+      "downstream_intent": "BPS Sensitivity",
+      "bps_sensitivity": ""
+    },
+    {
+      "field_name": "burst_morphology",
+      "type": "Object",
+      "description": "Nested signal containing `z_score`, `deviation_factor`, and `heuristic_flags`.",
+      "downstream_intent": "**A-CEO-KPISiphon** for high-level status; **SRE-AutoScaler** for resource triggers.",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "affected_infrastructure",
+      "type": "Array",
+      "description": "List of IDs for sources, services, and geographic regions impacted.",
+      "downstream_intent": "**Network-Orchestrator** for localized routing adjustments.",
+      "bps_sensitivity": "Medium"
+    },
+    {
+      "field_name": "customer_impact_projection",
+      "type": "Object",
+      "description": "Quantitative estimates of affected users and transaction failure rates.",
+      "downstream_intent": "**Customer-Success-Agent** for automated status page updates.",
+      "bps_sensitivity": "High"
+    },
+    {
+      "field_name": "remediation_payload",
+      "type": "Array",
+      "description": "Deterministic action strings (e.g., \"Scale +40%\").",
+      "downstream_intent": "**Cloud-Provisioning-Unit** for immediate execution.",
+      "bps_sensitivity": "Low"
+    },
+    {
+      "field_name": "anomaly_persistence",
+      "type": "Object",
+      "description": "Duration tracking and hysteresis data for cooldown management.",
+      "downstream_intent": "**Alert-Manager** to prevent notification storms.",
+      "bps_sensitivity": "Medium"
+    }
+  ]
+}

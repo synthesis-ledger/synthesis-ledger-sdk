@@ -1,0 +1,37 @@
+{
+  "id": 32,
+  "successBps": 9699,
+  "cid": "ar://SYNTH_ATOMIC_GAM_LORERECEIPT",
+  "costUsd": 1500,
+  "details": "# A-GAM-LoreReceipt Logic Module\n\n## Technical Documentation v2.4.1\n\n---\n\n## Module Overview\n\n| Attribute | Value |\n|-----------|-------|\n| **Module ID** | `A-GAM-LoreReceipt` |\n| **Classification** | Asynchronous Game Asset Manager |\n| **Domain** | Lore Content Receipt & Validation |\n| **Runtime Environment** | Event-driven microservice |\n| **Protocol** | gRPC / REST fallback |\n\n---\n\n## Functional Description\n\nThe `A-GAM-LoreReceipt` module handles ingestion, validation, deduplication, and acknowledgment of lore content payloads within the game asset pipeline. It serves as the primary receipt handler for narrative content synchronization across distributed game servers.\n\n---\n\n## Algorithmic Specifications\n\n### Core Processing Algorithm\n\n```\nFUNCTION ProcessLoreReceipt(payload):\n    hash ← SHA-256(payload.content)\n    \n    IF BloomFilter.MayContain(hash) THEN\n        IF ExactMatch(hash, LoreStore) THEN\n            RETURN ACK_DUPLICATE\n        END IF\n    END IF\n    \n    validated ← ValidateSchema(payload)\n    IF NOT validated THEN\n        RETURN NACK_INVALID\n    END IF\n    \n    BloomFilter.Add(hash)\n    LoreStore.Insert(payload, hash)\n    EventBus.Publish(LORE_RECEIVED, payload.id)\n    \n    RETURN ACK_SUCCESS\n```\n\n### Time Complexity Analysis\n\n| Operation | Average Case | Worst Case |\n|-----------|--------------|------------|\n| Hash Computation | O(n) | O(n) |\n| Bloom Filter Lookup | O(k) | O(k) |\n| Schema Validation | O(m) | O(m log m) |\n| Store Insertion | O(1) | O(log N) |\n| **Total Pipeline** | **O(n + k + m)** | **O(n + k + m log m + log N)** |\n\nWhere:\n- `n` = payload content size (bytes)\n- `k` = number of hash functions in Bloom filter\n- `m` = schema field count\n- `N` = total records in LoreStore\n\n### Space Complexity\n\n$$S_{total} = S_{bloom} + S_{buffer} + S_{cache}$$\n\n$$S_{bloom} = -\\frac{n \\cdot \\ln(p)}{(\\ln 2)^2}$$\n\nWhere:\n- `n` = expected number of elements\n- `p` = desired false positive rate (configured: 0.01)\n\n---\n\n## Bloom Filter Configuration\n\n| Parameter | Value | Formula |\n|-----------|-------|---------|\n| Expected Elements | 10,000,000 | — |\n| False Positive Rate | 1% | $p = 0.01$ |\n| Bit Array Size | 95,850,584 bits | $m = -\\frac{n \\ln p}{(\\ln 2)^2}$ |\n| Hash Functions | 7 | $k = \\frac{m}{n} \\ln 2$ |\n\n---\n\n## SRE Metrics & SLIs\n\n### Service Level Indicators\n\n| Metric | Target | Formula |\n|--------|--------|---------|\n| **Availability** | 99.95% | $\\frac{uptime}{total\\_time} \\times 100$ |\n| **Latency (p50)** | ≤ 15ms | — |\n| **Latency (p99)** | ≤ 150ms | — |\n| **Error Rate** | < 0.1% | $\\frac{failed\\_requests}{total\\_requests} \\times 100$ |\n| **Throughput** | ≥ 10,000 RPS | — |\n\n### Service Level Objectives\n\n```\nSLO_Availability = 99.95% over 30-day rolling window\nSLO_Latency_p99 = 150ms for 99% of requests\nSLO_ErrorBudget = 0.05% monthly\n```\n\n### Error Budget Calculation\n\n$$E_{budget} = (1 - SLO_{target}) \\times T_{window}$$\n\n$$E_{remaining} = E_{budget} - E_{consumed}$$\n\n$$BurnRate = \\frac{E_{consumed}}{E_{budget}} \\times \\frac{T_{window}}{T_{elapsed}}$$\n\n---\n\n## Failure Metrics\n\n### Failure Mode Classification\n\n| Failure Mode | MTBF (hours) | MTTR (minutes) | Impact |\n|--------------|--------------|----------------|--------|\n| `FM-001` Hash Collision | 8,760 | 5 | Low |\n| `FM-002` Schema Validation Timeout | 720 | 2 | Medium |\n| `FM-003` Store Write Failure | 2,160 | 15 | High |\n| `FM-004` Event Bus Disconnect | 1,440 | 8 | High |\n| `FM-005` Memory Exhaustion | 4,320 | 20 | Critical |\n\n### Reliability Calculations\n\n**Mean Time Between Failures (MTBF):**\n$$MTBF = \\frac{\\sum_{i=1}^{n} T_{operational,i}}{n_{failures}}$$\n\n**Availability from MTBF/MTTR:**\n$$A = \\frac{MTBF}{MTBF + MTTR}$$\n\n**Failure Rate (λ):**\n$$\\lambda = \\frac{1}{MTBF} = 1.14 \\times 10^{-4} \\text{ failures/hour}$$\n\n**Reliability over time t:**\n$$R(t) = e^{-\\lambda t}$$\n\n---\n\n## Circuit Breaker Configuration\n\n```yaml\ncircuit_breaker:\n  failure_threshold: 5\n  success_threshold: 3\n  timeout_ms: 30000\n  half_open_requests: 3\n  \nstates:\n  CLOSED:   # Normal operation\n  OPEN:     # Failing fast, no requests pass\n  HALF_OPEN: # Testing recovery\n```\n\n### State Transition Logic\n\n$$P_{trip} = \\begin{cases} 1 & \\text{if } failures \\geq threshold \\\\ 0 & \\text{otherwise} \\end{cases}$$\n\n---\n\n## Retry Policy\n\n| Attempt | Delay (ms) | Formula |\n|---------|------------|---------|\n| 1 | 100 | $d_0$ |\n| 2 | 200 | $d_0 \\times 2^1$ |\n| 3 | 400 | $d_0 \\times 2^2$ |\n| 4 | 800 | $d_0 \\times 2^3$ |\n| 5 | 1600 | $d_0 \\times 2^4$ |\n\n**Exponential Backoff with Jitter:**\n$$delay_n = \\min(cap, base \\times 2^n) + random(0, jitter)$$\n\n---\n\n## Monitoring & Alerting\n\n### Key Metrics Export\n\n```prometheus\n# Request latency histogram\nagam_lore_receipt_latency_seconds{quantile=\"0.5\"}\nagam_lore_receipt_latency_seconds{quantile=\"0.99\"}\n\n# Request counter by status\nagam_lore_receipt_requests_total{status=\"success|duplicate|invalid|error\"}\n\n# Active connections gauge\nagam_lore_receipt_active_connections\n\n# Bloom filter saturation\nagam_lore_receipt_bloom_saturation_ratio\n```\n\n### Alert Thresholds\n\n| Alert | Condition | Severity |\n|-------|-----------|----------|\n| `HighErrorRate` | `error_rate > 1%` for 5m | P2 |\n| `LatencyDegradation` | `p99 > 300ms` for 10m | P3 |\n| `CircuitOpen` | `state == OPEN` for 2m | P1 |\n| `BloomSaturation` | `saturation > 0.85` | P4 |\n| `MemoryPressure` | `heap_used > 90%` | P2 |\n\n---\n\n## Dependencies\n\n```\n┌─────────────────────┐\n│  A-GAM-LoreReceipt  │\n└──────────┬──────────┘\n           │\n     ┌─────┴─────┬──────────────┬─────────────┐\n     ▼           ▼              ▼             ▼\n┌─────────┐ ┌─────────┐ ┌────────────┐ ┌───────────┐\n│LoreStore│ │EventBus │ │SchemaCache │ │MetricsExp │\n│ (Redis) │ │ (Kafka) │ │  (Local)   │ │(Prometheus│\n└─────────┘ └─────────┘ └────────────┘ └───────────┘\n```\n\n---\n\n## Version History\n\n| Version | Date | Changes |\n|---------|------|---------|\n| 2.4.1 | 2024-01 | Added circuit breaker tuning |\n| 2.4.0 | 2023-11 | Bloom filter optimization |\n| 2.3.0 | 2023-08 | gRPC protocol support |\n\n---\n\n*Document Classification: Internal Engineering*\n*Owner: Platform Infrastructure Team*",
+  "outcome": "A-GAM-LoreReceipt",
+  "rType": 0,
+  "persona": "GAM",
+  "primary_model": "GPT-4o-Synthesis",
+  "privacy_tier": "Public",
+  "sybox_fee_split": {
+    "dev": 0.5,
+    "curation": 0.4,
+    "author": 0.1
+  },
+  "ticker": "SYNL",
+  "audit_cadence": "Weekly",
+  "lifecycle": "Genesis-Platinum",
+  "global_outputs": [
+    "synthesis_id",
+    "logic_id",
+    "bps_verified",
+    "model_stack",
+    "processing_ms",
+    "timestamp"
+  ],
+  "custom_outputs": [
+    {
+      "field_name": "Type",
+      "type": "Description",
+      "description": "Downstream Intent",
+      "downstream_intent": "BPS Sensitivity",
+      "bps_sensitivity": ""
+    }
+  ]
+}
