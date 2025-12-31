@@ -6,21 +6,15 @@ import path from 'path';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';
 
-// Force look for .env.local in the current working directory
+// Load Environment - Local Override Pattern
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 const program = new Command();
 const provider = new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_BASE_RPC_URL);
 
-// --- 🏛️ ADDRESS ANCHORS ---
+// --- 🏛️ SOVEREIGN CONTRACT CONSTANTS ---
 const REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_REGISTRY_ADDRESS;
 const SYNL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_SYNL_TOKEN_ADDRESS;
-
-const LEDGER_ABI = [
-    "function recordPulse(bytes32 id, uint256 bps, bytes32 certHash) external returns (bool)",
-    "function registry(bytes32 id) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)",
-    "function createSilo(bytes32 id, string cid) external returns (bool)"
-];
 
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) public returns (bool)",
@@ -31,7 +25,10 @@ const ERC20_ABI = [
 const callBridge = async (messages, modelName) => {
     const res = await fetch("https://api.x.ai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.XAI_API_KEY}` },
+        headers: { 
+            "Content-Type": "application/json", 
+            "Authorization": `Bearer ${process.env.XAI_API_KEY}` 
+        },
         body: JSON.stringify({ model: modelName, messages, temperature: 0 })
     });
     if (!res.ok) throw new Error(`xAI Error: ${res.status}`);
@@ -41,82 +38,86 @@ const callBridge = async (messages, modelName) => {
 program
   .name('synthesis')
   .description('Sovereign Audit Engine - Genesis v2')
-  .version('2.0.3');
+  .version('2.0.4');
 
-// --- 📋 COMMAND: LIST ---
-program
-  .command('list')
-  .description('Audit all 38 active Silos on the Base Ledger')
-  .action(() => {
-    try {
-        const genesisPath = 'C:/synthesis-ledger/genesis_onchain.json';
-        if (!fs.existsSync(genesisPath)) throw new Error(`Registry not found at ${genesisPath}`);
-        const genesisData = JSON.parse(fs.readFileSync(genesisPath));
-        console.log("\x1b[32m🔍 AUDITING BASE LEDGER SILOS...\x1b[0m");
-        console.log("--------------------------------------------------");
-        genesisData.forEach(s => {
-            console.log(`\x1b[36m[${s.id}]\x1b[0m \x1b[37m${s.outcome}\x1b[0m`);
-        });
-    } catch (err) { console.error(`\x1b[31mCRITICAL ERROR: ${err.message}\x1b[0m`); }
-  });
-
-// --- 🚀 COMMAND: RUN ---
 program
   .command('run')
-  .description('Execute a 3-Stage Sovereign Audit')
   .argument('<id>', 'Atomic ID')
-  .argument('<data>', 'Input Path or Raw JSON')
+  .argument('<data>', 'Input Path')
   .action(async (id, dataInput) => {
     try {
         if (!process.env.PRIVATE_KEY) throw new Error("PRIVATE_KEY missing in .env.local");
         
         const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-        const engine = new ethers.Contract(REGISTRY_ADDRESS, LEDGER_ABI, wallet);
-        const token = new ethers.Contract(SYNL_TOKEN_ADDRESS, ERC20_ABI, wallet);
-
-        const logicClock = new Date().toISOString();
-        const genesisData = JSON.parse(fs.readFileSync('C:/synthesis-ledger/genesis_onchain.json'));
-        const logic = genesisData.find(item => item.outcome === id);
-        if (!logic) throw new Error(`Logic ID "${id}" not found.`);
-
-        let inputContent = dataInput;
-        if (fs.existsSync(dataInput)) {
-            inputContent = fs.readFileSync(dataInput, 'utf8');
-        }
-
-        console.log(`\x1b[32m[$] EXEC_START: ${id}\x1b[0m`);
-        console.log(`\x1b[35m[$] LOGIC_CLOCK: ${logicClock}\x1b[0m`);
-        console.log("\x1b[90m--------------------------------------------------\x1b[0m");
-
-        // 🛡️ ENCODING & HASHING
         const hashedId = ethers.id(id);
+        
+        console.log(`[$] LOGIC_CLOCK: ${new Date().toISOString()}`);
         console.log(`⚓ TARGET ID HASH: ${hashedId}`);
 
-        // 🔍 STAGE 0: CHECK REGISTRY STATE
-        const silo = await engine.registry(hashedId);
-        if (silo.creator === ethers.ZeroAddress) {
-            console.log("⚠️  SILO UNINITIALIZED. ATTEMPTING GENESIS ANCHOR...");
-            const initTx = await engine.createSilo(hashedId, "ipfs://synthesis-genesis-v2-logic");
-            console.log(`[PENDING] Initialization: ${initTx.hash}`);
-            await initTx.wait();
-            console.log("✅ SILO INITIALIZED ON BASE.");
+        // --- 🔬 STAGE 0: SELECTOR SWEEP (ABI FORENSICS) ---
+        // We sweep likely function names to avoid 'no data present' reverts
+        const candidates = [
+            { name: "silos", abi: ["function silos(bytes32) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)"] },
+            { name: "registry", abi: ["function registry(bytes32) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)"] },
+            { name: "getSilo", abi: ["function getSilo(bytes32) view returns (string cid, address creator, uint256 bps, uint256 strikes, bool isObsolete)"] }
+        ];
+
+        let activeAbiFragment = null;
+        let siloState = null;
+        let functionName = "";
+
+        for (const cand of candidates) {
+            try {
+                const contractProbe = new ethers.Contract(REGISTRY_ADDRESS, cand.abi, provider);
+                siloState = await contractProbe[cand.name](hashedId);
+                activeAbiFragment = cand.abi[0];
+                functionName = cand.name;
+                console.log(`✅ SELECTOR MATCH: Using '${cand.name}'`);
+                break;
+            } catch (e) {
+                continue; 
+            }
         }
 
-        // 🛡️ SETTLEMENT: SYNL ALLOWANCE
+        if (!activeAbiFragment) throw new Error("Registry View Mismatch: 'silos', 'registry', and 'getSilo' all reverted.");
+
+        const engine = new ethers.Contract(REGISTRY_ADDRESS, [
+            activeAbiFragment,
+            "function recordPulse(bytes32 id, uint256 bps, bytes32 certHash) external returns (bool)",
+            "function createSilo(bytes32 id, string cid) external returns (bool)"
+        ], wallet);
+
+        const token = new ethers.Contract(SYNL_TOKEN_ADDRESS, ERC20_ABI, wallet);
+
+        // --- 🔍 STAGE 1: INITIALIZATION CHECK ---
+        if (siloState.creator === ethers.ZeroAddress) {
+            console.log("⚠️  SILO UNINITIALIZED. EXECUTING CREATE_SILO...");
+            const initTx = await engine.createSilo(hashedId, "ipfs://synthesis-genesis-v2-logic");
+            await initTx.wait();
+            console.log("✅ SILO ANCHORED ON BASE.");
+        }
+
+        // --- 🛡️ STAGE 2: SETTLEMENT PREP ---
         const allowance = await token.allowance(wallet.address, REGISTRY_ADDRESS);
         if (allowance < ethers.parseEther("1")) {
             console.log(">>> [SETTLEMENT] AUTHORIZING $SYNL...");
             await (await token.approve(REGISTRY_ADDRESS, ethers.parseUnits("1000", 18))).wait();
-            console.log("✅ ALLOWANCE ANCHORED.");
+            console.log("✅ ALLOWANCE AUTHORIZED.");
         }
 
-        // 🧠 REASONING
+        // --- 🧠 STAGE 3: REASONING ---
+        const logicPath = 'C:/synthesis-ledger/genesis_onchain.json';
+        const genesisData = JSON.parse(fs.readFileSync(logicPath));
+        const logic = genesisData.find(item => item.outcome === id);
+        
+        const inputContent = fs.existsSync(dataInput) ? fs.readFileSync(dataInput, 'utf8') : dataInput;
+
         console.log(">>> [BRAIN] PROCESSING MATH AND LOGIC...");
         const brainRes = await callBridge([{ role: "user", content: `Audit: ${inputContent}. Logic: ${logic.details}` }], "grok-4-1-fast-reasoning");
         const mathOutput = brainRes.choices[0].message.content;
         console.log(`\x1b[36m[BRAIN] CHATTER:\x1b[0m\n${mathOutput}\n`);
 
-        // 🛡️ AUDITOR: BPS PARSING & SCALING
+        // --- 🛡️ STAGE 4: AUDIT PARITY ---
         console.log(">>> [AUDITOR] VALIDATING PARITY...");
         const auditorRes = await callBridge([{ role: "system", content: "Extract the BPS equivalent as a decimal number (0.0 to 1.0) only." }, { role: "user", content: mathOutput }], "grok-code-fast-1");
         
@@ -126,7 +127,7 @@ program
 
         console.log(`📊 BPS SCALING: ${bpsDecimal} -> ${bpsInteger} units`);
 
-        // ⚓ ANCHOR
+        // --- ⚓ STAGE 5: ANCHOR ---
         console.log(`>>> [ANCHOR] SETTLING 1 $SYNL ON BASE...`);
         const tx = await engine.recordPulse(hashedId, bpsInteger, certHash, { gasLimit: 500000 });
         console.log(`\x1b[33m[PENDING] Pulse Sent: ${tx.hash}\x1b[0m`);
