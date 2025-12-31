@@ -1,4 +1,10 @@
 node_modules/
 .env*
 *.env
-bin/.env*
+bin/.env*# Synthesis Security Layer
+.env
+.env.local
+secrets/
+bin/secrets/
+temp/
+*.log
