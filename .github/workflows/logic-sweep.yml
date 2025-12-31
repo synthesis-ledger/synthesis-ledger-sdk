@@ -1,0 +1,34 @@
+﻿name: Sovereign Logic Sweep
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *' # Daily Audit Trigger
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install SDK Dependencies
+        run: |
+          cd synthesis-ledger-sdk
+          npm install
+
+      - name: Run Forensic Logic Sweep
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          NEXT_PUBLIC_BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+          NEXT_PUBLIC_REGISTRY_ADDRESS: "0x3fB0a9a5755f43A044ff0A9E9aC4B55f96220ECa"
+          NEXT_PUBLIC_SYNL_TOKEN_ADDRESS: "0x1eDf1DFa5489023dE2fd83252af741139766FEDD"
+        run: |
+          cd synthesis-ledger-sdk
+          node bin/index.js run A-CMO-PulseHarvester master_pulse.json
